@@ -100,6 +100,13 @@ func (b *Binary) UnmarshalYAML(unmarshal func(interface{}) error) error {
 }
 
 const (
+	// GradeEdge is used as the tag value for edge versions.
+	// Edge versions treat any other version with a build number
+	// as being more recent.
+	GradeEdge = "edge"
+)
+
+const (
 	// NumberRegex for matching version strings in the forms:
 	// - 1.2
 	// - 1.2.3
@@ -158,10 +165,11 @@ func ParseBinary(s string) (Binary, error) {
 }
 
 // Parse a version in strict mode. The following version patterns are accepted:
-//  1.2.3       (major, minor, patch)
-//  1.2-tag3    (major, minor, patch, tag)
-//  1.2.3.4     (major, minor, patch, build)
-//  1.2-tag3.4  (major, minor, patch, build)
+//
+//	1.2.3       (major, minor, patch)
+//	1.2-tag3    (major, minor, patch, tag)
+//	1.2.3.4     (major, minor, patch, build)
+//	1.2-tag3.4  (major, minor, patch, build)
 //
 // The ParseNonStrict function can be used instead to parse a wider range of
 // version patterns (e.g. major only, major/minor etc.).
@@ -178,13 +186,14 @@ func Parse(s string) (Number, error) {
 // are not considered pure semantic version values.
 //
 // The following version patterns are accepted:
-//  1           (major)
-//  1.2         (major, minor)
-//  1.2.3       (major, minor, patch)
-//  1.2-tag     (major, minor, tag)
-//  1.2-tag3    (major, minor, patch, tag)
-//  1.2.3.4     (major, minor, patch, build)
-//  1.2-tag3.4  (major, minor, patch, build)
+//
+//	1           (major)
+//	1.2         (major, minor)
+//	1.2.3       (major, minor, patch)
+//	1.2-tag     (major, minor, tag)
+//	1.2-tag3    (major, minor, patch, tag)
+//	1.2.3.4     (major, minor, patch, build)
+//	1.2-tag3.4  (major, minor, patch, build)
 func ParseNonStrict(s string) (Number, error) {
 	groups := captureNamedGroups(s, numberPat)
 	if n := parseVersion(groups, false); n != nil {
@@ -274,17 +283,59 @@ func (n Number) String() string {
 
 // Compare returns -1, 0 or 1 depending on whether
 // n is less than, equal to or greater than other.
-// The comparison compares Major, then Minor, then Patch, then Build, using the first difference as
+// The comparison compares Major, then Minor, then Patch, then Tag, then Build,
+// using the first difference as the determining factor.
+// Where the Tag is [GradeEdge], of the other version has a different
+// Tag or Build value, then the other version is considered more recent.
 func (n Number) Compare(other Number) int {
 	if n == other {
 		return 0
 	}
+	done := true
 	less := false
 	switch {
 	case n.Major != other.Major:
 		less = n.Major < other.Major
 	case n.Minor != other.Minor:
 		less = n.Minor < other.Minor
+	default:
+		done = false
+	}
+	if done {
+		if less {
+			return -1
+		}
+		return 1
+	}
+
+	if n.Tag == GradeEdge {
+		switch {
+		case n.Tag != other.Tag && n.Patch == other.Patch:
+			less = true
+		case n.Patch != other.Patch:
+			less = n.Patch < other.Patch
+		case n.Build != other.Build:
+			less = other.Build != 0
+		}
+		if less {
+			return -1
+		}
+		return 1
+	}
+	if other.Tag == GradeEdge {
+		switch {
+		case n.Patch != other.Patch:
+			less = n.Patch < other.Patch
+		case n.Build != other.Build:
+			less = n.Build == 0
+		}
+		if less {
+			return -1
+		}
+		return 1
+	}
+
+	switch {
 	case n.Tag != other.Tag:
 		switch {
 		case n.Tag == "":

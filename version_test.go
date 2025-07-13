@@ -45,6 +45,12 @@ func (*suite) TestCompare(c *gc.C) {
 		{"2.0.0.0", "2.0.0.0", 0},
 		{"2.0.0.1", "2.0.0.0", 1},
 		{"2.0.1.10", "2.0.0.0", 1},
+		{"2.0-edge1", "2.0.1", -1},
+		{"2.0-edge1", "2.0.0.1", 1},
+		{"2.0-edge1", "2.1.0", -1},
+		{"2.0-edge1", "2.0-edge1.1", -1},
+		{"2.0-edge2", "2.0-edge1", 1},
+		{"2.0-edge2", "2.1-edge1", -1},
 	}
 
 	for i, test := range cmpTests {
@@ -60,6 +66,20 @@ func (*suite) TestCompare(c *gc.C) {
 		compare = v2.Compare(v1)
 		c.Check(compare, gc.Equals, -test.compare)
 	}
+}
+
+func (*suite) TestCompareEdgeWithBuild(c *gc.C) {
+	v1, err := version.Parse("2.0-edge1.345")
+	c.Assert(err, jc.ErrorIsNil)
+	v2, err := version.Parse("2.0-edge1.123")
+	c.Assert(err, jc.ErrorIsNil)
+	compare := v1.Compare(v2)
+	c.Check(compare, gc.Equals, -1)
+	// Check that reversing the operands has
+	// no effect since edge builds are always
+	// considered less than all else being equal.
+	compare = v2.Compare(v1)
+	c.Check(compare, gc.Equals, -1)
 }
 
 func (*suite) TestCompareAfterPatched(c *gc.C) {
